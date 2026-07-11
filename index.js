@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import userRouters from './routes/userRouter.js';
+import championshipRouters from './routes/championshipRouter.js';
 
 dotenv.config();
 
@@ -54,6 +55,7 @@ mongoose.connect(connectionString)
 
 // Define routes
 app.use("/api/users", userRouters);
+app.use("/api/championships", championshipRouters);
 
 
 const port = process.env.PORT;
