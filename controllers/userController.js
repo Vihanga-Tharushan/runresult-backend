@@ -2,6 +2,22 @@ import User from "../models/user.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import axios from "axios";
+import nodemailer from "nodemailer";
+import OTP from "../models/otpModel.js";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.APP_PASSWORD,
+    },
+});
 
 export function createUser(req, res) {
 
@@ -282,4 +298,204 @@ export function deleteUser(req, res) {
             res.json({ message: "User deleted successfully" });
         })
         .catch(() => res.status(500).json({ message: "Error deleting user" }));
+}
+
+export async function sendOTP(req, res) {
+
+    const email = req.params.email;
+    if(email == null){
+        res.status(400).json({
+            message: "Email not provided"
+        });
+
+        return;
+    }
+
+    // Generate a 6-digit OTP 100000 to 999999
+    const otp = Math.floor(100000 + Math.random() * 900000);
+
+    try{
+
+        await OTP.deleteMany({ email: email });
+
+        const newOTP = new OTP({
+            email: email,
+            otp: otp
+        });
+
+        await newOTP.save();
+
+        await transporter.sendMail({
+            from: `"RunResult" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: "Your Verification Code - RunResult",
+            text: `Your verification code is ${otp}. It is valid for 10 minutes.`,
+            html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="x-apple-disable-message-reformatting" />
+  <title>Verification Code</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#F1F5F9;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#F1F5F9;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:520px;">
+
+          <!-- Logo -->
+          <tr>
+            <td align="center" style="padding-bottom:32px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="background-color:#0342B3;border-radius:14px;padding:10px 16px;">
+                    <span style="font-family:'Inter',sans-serif;font-size:20px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">RunResult</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td style="background-color:#ffffff;border-radius:20px;box-shadow:0 4px 24px rgba(0,0,0,0.06);overflow:hidden;">
+              <!-- Blue Top Accent -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="height:4px;background:linear-gradient(90deg,#0342B3,#2563EB,#0342B3);"></td>
+                </tr>
+              </table>
+
+              <!-- Content -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="padding:40px 40px 16px;">
+                <!-- Icon -->
+                <tr>
+                  <td align="center" style="padding-bottom:24px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="background-color:#EFF6FF;border-radius:50%;width:64px;height:64px;text-align:center;vertical-align:middle;">
+                          <span style="font-size:28px;line-height:64px;">&#128274;</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Heading -->
+                <tr>
+                  <td align="center" style="padding-bottom:12px;">
+                    <span style="font-family:'Inter',sans-serif;font-size:22px;font-weight:700;color:#0F172A;">Password Reset Request</span>
+                  </td>
+                </tr>
+
+                <!-- Subtext -->
+                <tr>
+                  <td align="center" style="padding-bottom:32px;">
+                    <span style="font-family:'Inter',sans-serif;font-size:14px;color:#64748B;line-height:1.6;">
+                      We received a request to reset your password. Use the verification code below to continue. This code expires in <strong style="color:#0F172A;">10 minutes</strong>.
+                    </span>
+                  </td>
+                </tr>
+
+                <!-- OTP Box -->
+                <tr>
+                  <td align="center" style="padding-bottom:32px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background-color:#F8FAFC;border:2px dashed #CBD5E1;border-radius:16px;width:100%;">
+                      <tr>
+                        <td align="center" style="padding:28px 20px;">
+                          <span style="font-family:'Inter',sans-serif;font-size:12px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:2px;display:block;margin-bottom:10px;">Your Verification Code</span>
+                          <span style="font-family:'Inter',sans-serif;font-size:40px;font-weight:800;color:#0342B3;letter-spacing:10px;display:block;">${otp}</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Divider -->
+                <tr>
+                  <td style="padding-bottom:24px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="border-top:1px solid #E2E8F0;font-size:0;line-height:0;">&nbsp;</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Security Notice -->
+                <tr>
+                  <td style="padding-bottom:8px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background-color:#FEF9EE;border:1px solid #FDE68A;border-radius:12px;width:100%;">
+                      <tr>
+                        <td style="padding:14px 16px;">
+                          <span style="font-family:'Inter',sans-serif;font-size:13px;color:#92400E;line-height:1.5;">
+                            &#9888;&#65039; <strong>Didn't request this?</strong> If you didn't ask for a password reset, you can safely ignore this email. Your password will remain unchanged.
+                          </span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding:28px 16px 0;">
+              <span style="font-family:'Inter',sans-serif;font-size:12px;color:#94A3B8;line-height:1.6;">
+                &copy; ${new Date().getFullYear()} RunResult. All rights reserved.<br/>
+                <span style="color:#CBD5E1;">Track. Compete. Achieve.</span>
+              </span>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+        });
+
+
+        res.json({
+            message: "OTP sent successfully"
+        });
+
+    }catch(err){
+        res.status(500).json({
+            message: "Error sending OTP"
+        });
+    }
+}
+
+
+export async function changePasswordViaOTP(req, res) {
+
+    const email = req.body.email;
+    const otp = req.body.otp;
+    const newPassword = req.body.newPassword;
+
+
+    const otpRecord = await OTP.findOne({ email: email, otp: otp });
+
+    if(otpRecord == null){
+        return res.status(400).json({
+            message: "Invalid OTP"
+        });
+    }
+
+    try {
+        await User.updateOne({ email: email }, { password: bcrypt.hashSync(newPassword, 10) });
+        await OTP.deleteMany({ email: email });
+        res.json({ message: "Password changed successfully" });
+    } catch (err) {
+        res.status(500).json({ message: "Error changing password" });
+    }
 }
