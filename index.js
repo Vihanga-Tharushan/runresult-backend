@@ -5,6 +5,8 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import userRouters from './routes/userRouter.js';
 import championshipRouters from './routes/championshipRouter.js';
+import registrationRouters from './routes/registrationRouter.js';
+import resultRouters from './routes/resultRouter.js';
 
 dotenv.config();
 
@@ -56,6 +58,8 @@ mongoose.connect(connectionString)
 // Define routes
 app.use("/api/users", userRouters);
 app.use("/api/championships", championshipRouters);
+app.use("/api/registrations", registrationRouters);
+app.use("/api/results", resultRouters);
 
 
 const port = process.env.PORT;

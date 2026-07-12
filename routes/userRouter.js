@@ -1,5 +1,5 @@
 import express from "express";
-import { createUser, loginUser, getUser, googleLogin, getStaff, createStaff, getUserCounts, updateProfile, updateStaff, deleteUser } from "../controllers/userController.js";
+import { createUser, loginUser, getUser, googleLogin, getStaff, createStaff, getUserCounts, updateProfile, updateStaff, deleteUser, sendOTP , changePasswordViaOTP} from "../controllers/userController.js";
 
 const userRouters = express.Router();
 
@@ -13,4 +13,7 @@ userRouters.get("/staff", getStaff);
 userRouters.post("/staff", createStaff);
 userRouters.put("/:id", updateStaff);
 userRouters.delete("/:id", deleteUser);
+userRouters.get("/send-otp/:email", sendOTP); // New route for sending OTP
+userRouters.post("/change-password", changePasswordViaOTP); // New route for changing password
+
 export default userRouters;
