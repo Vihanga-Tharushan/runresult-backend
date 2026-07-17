@@ -95,7 +95,7 @@ export function updateChampionship(req, res) {
       ...data,
       eventCount: data.selectedEvents?.length || 0,
     },
-    { new: true }
+    { returnDocument: 'after' }
   )
     .then((championship) => {
       if (!championship) {

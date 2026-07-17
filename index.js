@@ -53,7 +53,8 @@ mongoose.connect(connectionString)
   })
   .catch((error) => {
     console.error('Error connecting to MongoDB:', error);
-  });
+
+});
 
 // Define routes
 app.use("/api/users", userRouters);
