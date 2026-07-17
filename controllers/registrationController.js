@@ -16,7 +16,7 @@ async function generateBibNumber(championshipId) {
   const counter = await Counter.findOneAndUpdate(
     { championshipId },
     { $inc: { bibCount: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
   return String(counter.bibCount).padStart(3, '0');
 }
@@ -25,7 +25,7 @@ async function generateRegistrationNumber(championshipId) {
   const counter = await Counter.findOneAndUpdate(
     { championshipId },
     { $inc: { regCount: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
   return `RRN-${championshipId}-${String(counter.regCount).padStart(4, '0')}`;
 }

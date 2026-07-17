@@ -279,7 +279,7 @@ export function updateStaff(req, res) {
     const updates = {}
     if (req.body.name) updates.name = req.body.name
     if (req.body.password) updates.password = bcrypt.hashSync(req.body.password, 10)
-    User.findByIdAndUpdate(req.params.id, updates, { new: true })
+    User.findByIdAndUpdate(req.params.id, updates, { returnDocument: 'after' })
         .select('-password')
         .then(user => {
             if (!user) return res.status(404).json({ message: "User not found" })
