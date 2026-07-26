@@ -7,6 +7,7 @@ import userRouters from './routes/userRouter.js';
 import championshipRouters from './routes/championshipRouter.js';
 import registrationRouters from './routes/registrationRouter.js';
 import resultRouters from './routes/resultRouter.js';
+import previousResultRouters from './routes/previousResultRouter.js';
 
 dotenv.config();
 
@@ -61,6 +62,7 @@ app.use("/api/users", userRouters);
 app.use("/api/championships", championshipRouters);
 app.use("/api/registrations", registrationRouters);
 app.use("/api/results", resultRouters);
+app.use("/api/previous-results", previousResultRouters);
 
 
 const port = process.env.PORT;
