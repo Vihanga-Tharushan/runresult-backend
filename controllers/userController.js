@@ -311,6 +311,11 @@ export async function sendOTP(req, res) {
         return;
     }
 
+    const user = await User.findOne({ email });
+    if (!user) {
+        return res.status(404).json({ message: "No account found with this email" });
+    }
+
     // Generate a 6-digit OTP 100000 to 999999
     const otp = Math.floor(100000 + Math.random() * 900000);
 
@@ -491,8 +496,15 @@ export async function changePasswordViaOTP(req, res) {
         });
     }
 
+    const user = await User.findOne({ email });
+    if (!user) {
+        await OTP.deleteMany({ email });
+        return res.status(404).json({ message: "No account found with this email" });
+    }
+
     try {
-        await User.updateOne({ email: email }, { password: bcrypt.hashSync(newPassword, 10) });
+        user.password = bcrypt.hashSync(newPassword, 10);
+        await user.save();
         await OTP.deleteMany({ email: email });
         res.json({ message: "Password changed successfully" });
     } catch (err) {
