@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import Championship from '../models/championship.js';
 
 function parseSheet(rows) {
@@ -126,13 +124,13 @@ export async function getFinalResults(req, res) {
       return res.json({ events: {}, days: [] });
     }
 
-    const serviceAccountPath = path.resolve('service-account.json');
-    if (!fs.existsSync(serviceAccountPath)) {
+    const serviceAccountB64 = process.env.GOOGLE_SERVICE_ACCOUNT_B64;
+    if (!serviceAccountB64) {
       return res.status(500).json({ message: 'Google Sheets service account not configured' });
     }
 
     const { google } = await import('googleapis');
-    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    const serviceAccount = JSON.parse(Buffer.from(serviceAccountB64, 'base64').toString('utf8'));
     const sheetId = sheetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
     if (!sheetId) {
       return res.status(400).json({ message: 'Invalid Google Sheet URL' });

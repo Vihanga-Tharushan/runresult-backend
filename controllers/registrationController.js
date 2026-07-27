@@ -1,6 +1,4 @@
 import mongoose from 'mongoose';
-import fs from 'fs';
-import path from 'path';
 import Registration from '../models/registration.js';
 import Championship from '../models/championship.js';
 
@@ -36,15 +34,15 @@ async function appendToGoogleSheet(championship, registration) {
     return;
   }
 
-  const serviceAccountPath = path.resolve('service-account.json');
-  if (!fs.existsSync(serviceAccountPath)) {
-    console.log('Google Sheets: service-account.json not found');
+  const serviceAccountB64 = process.env.GOOGLE_SERVICE_ACCOUNT_B64;
+  if (!serviceAccountB64) {
+    console.log('Google Sheets: GOOGLE_SERVICE_ACCOUNT_B64 env var not set');
     return;
   }
 
   try {
     const { google } = await import('googleapis');
-    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    const serviceAccount = JSON.parse(Buffer.from(serviceAccountB64, 'base64').toString('utf8'));
     const sheetId = sheetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
     if (!sheetId) {
       console.log('Google Sheets: Could not extract sheet ID from URL:', sheetUrl);
