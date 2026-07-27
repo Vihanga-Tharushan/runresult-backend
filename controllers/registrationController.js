@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import Registration from '../models/registration.js';
 import Championship from '../models/championship.js';
 
