@@ -194,6 +194,76 @@ export function parseHeatSheet(rows) {
   return events;
 }
 
+export function parseStartListSheet(rows) {
+  const events = {};
+  let currentEvent = null;
+
+  for (const row of rows) {
+    const cells = (row || []).map((c) => String(c ?? '').trim());
+    if (cells.every((c) => c === '')) continue;
+
+    const firstCell = cells[0];
+
+    if (firstCell === 'E No' || firstCell === 'E: No:') {
+      const eventNo = cells[1] || '';
+      const eventName = cells[2] || '';
+      if (!eventNo || !eventName || eventName === '#N/A') continue;
+
+      const heatNo = cells[4] || '';
+      const id = `${eventNo}-${heatNo || 'F'}`;
+      const lower = eventName.toLowerCase();
+
+      currentEvent = {
+        id,
+        eventNo,
+        name: eventName,
+        gender: lower.includes('girls')
+          ? 'Girls'
+          : lower.includes('boys')
+            ? 'Boys'
+            : lower.includes('women')
+              ? 'Women'
+              : lower.includes('men')
+                ? 'Men'
+                : '',
+        category: (eventName.match(/U\s*\d+/) || [])[0] || '',
+        round: heatNo ? `Heat ${heatNo}` : 'Final',
+        entries: [],
+      };
+      events[id] = currentEvent;
+      continue;
+    }
+
+    if (firstCell === 'BIB') continue;
+
+    if (currentEvent) {
+      const bib = firstCell;
+      const athlete = cells[1] || '';
+      const affiliate = cells[2] || '';
+      const dob = cells[3] || '';
+      const lane = cells[4] || '';
+      const remarks = cells[5] || '';
+
+      if (!bib || bib === '-' || bib === '#N/A') continue;
+      if (!athlete || athlete === '#N/A') continue;
+
+      currentEvent.entries.push({
+        lane,
+        bib,
+        athlete,
+        club: affiliate,
+        country: '',
+        dob: dob === '#N/A' ? '' : dob,
+        pb: '',
+        sb: '',
+        remarks: remarks === '#N/A' ? '' : remarks,
+      });
+    }
+  }
+
+  return events;
+}
+
 export async function getHeatResults(req, res) {
   try {
     const { championshipId } = req.params;
@@ -337,5 +407,296 @@ export async function getFinalResults(req, res) {
   } catch (err) {
     console.error('Error fetching final results:', err.message);
     res.status(500).json({ message: 'Error fetching final results' });
+  }
+}
+
+export async function getStartList(req, res) {
+  try {
+    const { championshipId } = req.params;
+
+    const championship = await Championship.findOne({ championship_id: championshipId });
+    if (!championship) {
+      return res.status(404).json({ message: 'Championship not found' });
+    }
+
+    const sheetUrl = championship.googleSheets?.startList?.url;
+    if (!sheetUrl) {
+      return res.json({ events: {} });
+    }
+
+    const tabs = await fetchSpreadsheetData(sheetUrl);
+    const allEvents = {};
+
+    for (const tab of tabs) {
+      const parsed = parseStartListSheet(tab.rows);
+      for (const [id, event] of Object.entries(parsed)) {
+        if (!allEvents[id]) {
+          allEvents[id] = event;
+        } else {
+          allEvents[id].entries.push(...event.entries);
+        }
+      }
+    }
+
+    res.json({ events: allEvents });
+  } catch (err) {
+    console.error('Error fetching start list:', err.message);
+    res.status(500).json({ message: 'Error fetching start list' });
+  }
+}
+
+async function fetchSpreadsheetData(sheetUrl) {
+  const serviceAccountB64 = process.env.GOOGLE_SERVICE_ACCOUNT_B64;
+  if (!serviceAccountB64) {
+    throw new Error('Google Sheets service account not configured');
+  }
+
+  const { google } = await import('googleapis');
+  const serviceAccount = JSON.parse(Buffer.from(serviceAccountB64, 'base64').toString('utf8'));
+  const sheetId = sheetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+  if (!sheetId) {
+    throw new Error('Invalid Google Sheet URL');
+  }
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: serviceAccount,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+  const sheets = google.sheets({ version: 'v4', auth });
+
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: sheetId,
+    fields: 'sheets.properties',
+  });
+
+  const tabs = [];
+  for (const sheet of meta.data.sheets) {
+    const sheetName = sheet.properties.title;
+    const rowCount = sheet.properties.gridProperties?.rowCount || 1000;
+    const colCount = sheet.properties.gridProperties?.columnCount || 26;
+    const lastCol = String.fromCharCode(64 + Math.min(colCount, 26));
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: `${sheetName}!A1:${lastCol}${rowCount}`,
+    });
+    tabs.push({ name: sheetName, rows: res.data.values || [] });
+  }
+
+  return tabs;
+}
+
+export function parsePointsSheet(rows) {
+  const zones = [];
+  const schools = [];
+  let current = null;
+  let map = null;
+
+  for (const row of rows) {
+    const cells = (row || []).map((c) => String(c ?? '').trim());
+    if (cells.every((c) => c === '')) {
+      current = null;
+      map = null;
+      continue;
+    }
+
+    const lower = cells.map((c) => c.toLowerCase());
+
+    if (lower[0] === 'zone' && lower.includes('place') && lower.includes('points')) {
+      const schoolIdx = lower.findIndex((c) => /school/.test(c));
+      if (schoolIdx >= 0) {
+        current = 'schools';
+        map = {
+          zone: 0,
+          school: schoolIdx,
+          place: lower.findIndex((c) => c === 'place'),
+          points: lower.findIndex((c) => c === 'points'),
+        };
+      } else {
+        current = 'zones';
+        map = {
+          zone: 0,
+          place: lower.findIndex((c) => c === 'place'),
+          points: lower.findIndex((c) => c === 'points'),
+        };
+      }
+      continue;
+    }
+
+    if (current && map) {
+      const zone = cells[map.zone];
+      if (!zone) continue;
+      const toInt = (i) => (i >= 0 ? parseInt(cells[i] || '0', 10) || 0 : 0);
+
+      if (current === 'zones') {
+        zones.push({
+          zone,
+          place: toInt(map.place),
+          points: toInt(map.points),
+        });
+      } else {
+        schools.push({
+          zone,
+          school: cells[map.school],
+          place: toInt(map.place),
+          points: toInt(map.points),
+        });
+      }
+    }
+  }
+
+  return { zones, schools };
+}
+
+export function parseMedalsSheet(rows) {
+  const sections = [];
+  let current = null;
+  let pendingName = null;
+
+  for (const row of rows) {
+    const cells = (row || []).map((c) => String(c ?? '').trim());
+    if (cells.every((c) => c === '')) continue;
+
+    const lower = cells.map((c) => c.toLowerCase());
+    const nonEmpty = cells.filter((c) => c !== '');
+
+    if (nonEmpty.length === 1 && !/^\d+$/.test(cells[0])) {
+      pendingName = cells[0];
+      continue;
+    }
+
+    if (lower.includes('gold') && lower.includes('silver')) {
+      const rankIdx = lower.findIndex((c) => c === 'rank');
+      const goldIdx = lower.findIndex((c) => c === 'gold');
+      const silverIdx = lower.findIndex((c) => c === 'silver');
+      const bronzeIdx = lower.findIndex((c) => c === 'bronze');
+      const totalIdx = lower.findIndex((c) => c === 'total');
+
+      const used = new Set([rankIdx, goldIdx, silverIdx, bronzeIdx, totalIdx]);
+      let entityIdx = -1;
+      for (let i = 0; i < cells.length; i++) {
+        if (!used.has(i) && cells[i] !== '') {
+          entityIdx = i;
+          break;
+        }
+      }
+      if (entityIdx === -1) entityIdx = 0;
+
+      let name = pendingName || 'Medal Tally';
+      if (!pendingName && lower.includes('zone')) name = 'Zone Medal Tally';
+      if (!pendingName && lower.some((c) => /school/.test(c))) name = 'School Medal Tally';
+
+      current = {
+        entity: entityIdx,
+        rank: rankIdx,
+        gold: goldIdx,
+        silver: silverIdx,
+        bronze: bronzeIdx,
+        total: totalIdx,
+      };
+      sections.push({ name, rows: [] });
+      pendingName = null;
+      continue;
+    }
+
+    if (current) {
+      const entity = cells[current.entity];
+      if (!entity) continue;
+      const toInt = (i) => (i >= 0 && cells[i] !== '' ? parseInt(cells[i], 10) : 0);
+
+      sections[sections.length - 1].rows.push({
+        name: entity,
+        rank: current.rank >= 0 && cells[current.rank] !== '' ? parseInt(cells[current.rank], 10) : null,
+        gold: toInt(current.gold),
+        silver: toInt(current.silver),
+        bronze: toInt(current.bronze),
+        total: current.total >= 0 && cells[current.total] !== '' ? parseInt(cells[current.total], 10) : null,
+      });
+    }
+  }
+
+  return sections;
+}
+
+export async function getPoints(req, res) {
+  try {
+    const { championshipId } = req.params;
+
+    const championship = await Championship.findOne({ championship_id: championshipId });
+    if (!championship) {
+      return res.status(404).json({ message: 'Championship not found' });
+    }
+
+    const sheetUrl = championship.googleSheets?.points?.url;
+    if (!sheetUrl) {
+      return res.json({ zones: [], schools: [] });
+    }
+
+    const tabs = await fetchSpreadsheetData(sheetUrl);
+    const zones = [];
+    const schools = [];
+
+    for (const tab of tabs) {
+      const parsed = parsePointsSheet(tab.rows);
+      zones.push(...parsed.zones);
+      schools.push(...parsed.schools);
+    }
+
+    zones.sort((a, b) => (a.place || 999) - (b.place || 999));
+    schools.sort((a, b) => (a.place || 999) - (b.place || 999));
+
+    res.json({ zones, schools });
+  } catch (err) {
+    console.error('Error fetching points:', err.message);
+    res.status(500).json({ message: 'Error fetching points' });
+  }
+}
+
+export async function getMedals(req, res) {
+  try {
+    const { championshipId } = req.params;
+
+    const championship = await Championship.findOne({ championship_id: championshipId });
+    if (!championship) {
+      return res.status(404).json({ message: 'Championship not found' });
+    }
+
+    const sheetUrl = championship.googleSheets?.medals?.url;
+    if (!sheetUrl) {
+      return res.json({ sections: [] });
+    }
+
+    const tabs = await fetchSpreadsheetData(sheetUrl);
+    const sections = [];
+
+    for (const tab of tabs) {
+      const parsed = parseMedalsSheet(tab.rows);
+      for (const section of parsed) {
+        const existing = sections.find((s) => s.name === section.name);
+        if (existing) {
+          existing.rows.push(...section.rows);
+        } else {
+          sections.push(section);
+        }
+      }
+    }
+
+    const sortRows = (a, b) => {
+      if (a.rank != null && b.rank != null && a.rank !== b.rank) return a.rank - b.rank;
+      const aTotal = a.total ?? a.gold + a.silver + a.bronze;
+      const bTotal = b.total ?? b.gold + b.silver + b.bronze;
+      if (bTotal !== aTotal) return bTotal - aTotal;
+      if (b.gold !== a.gold) return b.gold - a.gold;
+      if (b.silver !== a.silver) return b.silver - a.silver;
+      return b.bronze - a.bronze;
+    };
+
+    for (const section of sections) {
+      section.rows.sort(sortRows);
+    }
+
+    res.json({ sections });
+  } catch (err) {
+    console.error('Error fetching medals:', err.message);
+    res.status(500).json({ message: 'Error fetching medals' });
   }
 }

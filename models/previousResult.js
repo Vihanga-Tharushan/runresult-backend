@@ -3,8 +3,7 @@ import mongoose from "mongoose";
 const previousResultSchema = new mongoose.Schema({
   championshipName: { type: String, required: true },
   venue: { type: String, required: true },
-  fromDate: { type: String, required: true },
-  toDate: { type: String, required: true },
+  year: { type: Number },
   description: { type: String, default: '' },
   resultType: {
     type: String,

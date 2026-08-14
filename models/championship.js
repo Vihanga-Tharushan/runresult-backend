@@ -49,6 +49,8 @@ const championshipSchema = new mongoose.Schema({
     heatResults: { url: String, connected: { type: Boolean, default: false } },
     finalResults: { url: String, connected: { type: Boolean, default: false } },
     certificate: { url: String, connected: { type: Boolean, default: false } },
+    points: { url: String, connected: { type: Boolean, default: false } },
+    medals: { url: String, connected: { type: Boolean, default: false } },
   },
   createdBy: { type: String, default: '' },
   

@@ -3,8 +3,8 @@ import PreviousResult from "../models/previousResult.js";
 export async function createPreviousResult(req, res) {
   const data = req.body;
 
-  if (!data.championshipName || !data.venue || !data.fromDate || !data.toDate) {
-    return res.status(400).json({ message: "Championship name, venue, and dates are required" });
+  if (!data.championshipName || !data.venue || !data.year) {
+    return res.status(400).json({ message: "Championship name, venue, and year are required" });
   }
 
   if (!data.resultType || !['pdf', 'spreadsheet', 'drive'].includes(data.resultType)) {
@@ -22,8 +22,7 @@ export async function createPreviousResult(req, res) {
   const previousResult = new PreviousResult({
     championshipName: data.championshipName,
     venue: data.venue,
-    fromDate: data.fromDate,
-    toDate: data.toDate,
+    year: data.year,
     description: data.description || '',
     resultType: data.resultType,
     fileUrl: data.fileUrl || '',
@@ -84,8 +83,7 @@ export function updatePreviousResult(req, res) {
     {
       championshipName: data.championshipName,
       venue: data.venue,
-      fromDate: data.fromDate,
-      toDate: data.toDate,
+      year: data.year,
       description: data.description || '',
       resultType: data.resultType,
       fileUrl: data.fileUrl || '',

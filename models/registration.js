@@ -35,9 +35,9 @@ const registrationSchema = new mongoose.Schema({
   totalFee: { type: Number, default: 0 },
 
   // Payment
-  paymentMethod: { type: String, enum: ['online', 'bank-slip'], default: '' },
+  paymentMethod: { type: String, enum: ['cash-deposit'], default: 'cash-deposit' },
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
-  bankSlipUrl: { type: String, default: '' },
+  receiptNumber: { type: String, default: '' },
 
   // Status
   registrationStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },

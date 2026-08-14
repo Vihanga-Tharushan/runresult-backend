@@ -81,13 +81,14 @@ async function appendToGoogleSheet(championship, registration) {
         String(registration.eventCount),
         registration.paymentMethod,
         registration.paymentStatus,
+        registration.receiptNumber,
         registration.registrationStatus,
       ],
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
-      range: 'Sheet1!A:Q',
+      range: 'Sheet1!A:R',
       valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values },
@@ -107,7 +108,7 @@ export async function registerAthlete(req, res) {
     const {
       championshipId, fullName, nameWithInitials, gender, dateOfBirth,
       ageCategory, email, mobile, nic, institution, address,
-      selectedEvents, paymentMethod, totalFee,
+      selectedEvents, receiptNumber, totalFee,
     } = req.body;
 
     if (!req.user) {
@@ -133,6 +134,15 @@ export async function registerAthlete(req, res) {
 
     if (!fullName || !gender || !dateOfBirth || !mobile || !email) {
       return res.status(400).json({ message: 'All required fields must be filled' });
+    }
+
+    if (!receiptNumber || !receiptNumber.trim()) {
+      return res.status(400).json({ message: 'Cash deposit receipt number is required' });
+    }
+
+    const existingReceipt = await Registration.findOne({ receiptNumber: receiptNumber.trim() });
+    if (existingReceipt) {
+      return res.status(409).json({ message: 'This cash deposit receipt number is already used' });
     }
 
     const user = await import('../models/user.js').then(m => m.default.findOne({ email: req.user.email }));
@@ -171,8 +181,9 @@ export async function registerAthlete(req, res) {
       selectedEvents,
       eventCount: selectedEvents.length,
       totalFee: totalFee || 0,
-      paymentMethod: paymentMethod || '',
-      paymentStatus: paymentMethod === 'online' ? 'paid' : 'pending',
+      paymentMethod: 'cash-deposit',
+      receiptNumber: receiptNumber.trim(),
+      paymentStatus: 'pending',
       registrationStatus: 'pending',
     });
 
@@ -197,6 +208,63 @@ export async function registerAthlete(req, res) {
   } catch (err) {
     console.error('Registration error:', err);
     res.status(500).json({ message: 'Registration failed. Please try again.' });
+  }
+}
+
+export async function updateRegistration(req, res) {
+  try {
+    const { id } = req.params;
+    const data = req.body || {};
+
+    const registration = await Registration.findById(id);
+    if (!registration) {
+      return res.status(404).json({ message: 'Registration not found' });
+    }
+
+    if (data.fullName !== undefined) registration.fullName = data.fullName;
+    if (data.nameWithInitials !== undefined) registration.nameWithInitials = data.nameWithInitials;
+    if (data.gender !== undefined) registration.gender = data.gender;
+    if (data.dateOfBirth !== undefined) registration.dateOfBirth = data.dateOfBirth;
+    if (data.ageCategory !== undefined) registration.ageCategory = data.ageCategory;
+    if (data.mobile !== undefined) registration.mobile = data.mobile;
+    if (data.nic !== undefined) registration.nic = data.nic;
+    if (data.institution !== undefined) registration.institution = data.institution;
+    if (data.athleteEmail !== undefined) registration.athleteEmail = data.athleteEmail;
+
+    if (data.address !== undefined) {
+      registration.address = {
+        district: data.address.district !== undefined ? data.address.district : registration.address?.district,
+        addressLine1: data.address.addressLine1 !== undefined ? data.address.addressLine1 : registration.address?.addressLine1,
+        addressLine2: data.address.addressLine2 !== undefined ? data.address.addressLine2 : registration.address?.addressLine2,
+      };
+    }
+
+    if (data.selectedEvents !== undefined) {
+      registration.selectedEvents = data.selectedEvents;
+      registration.eventCount = data.selectedEvents.length;
+    }
+    if (data.totalFee !== undefined) registration.totalFee = data.totalFee;
+    if (data.paymentMethod !== undefined) registration.paymentMethod = data.paymentMethod;
+    if (data.paymentStatus !== undefined) registration.paymentStatus = data.paymentStatus;
+    if (data.registrationStatus !== undefined) registration.registrationStatus = data.registrationStatus;
+
+    if (data.receiptNumber !== undefined) {
+      const receipt = data.receiptNumber.trim();
+      if (receipt) {
+        const dup = await Registration.findOne({ receiptNumber: receipt, _id: { $ne: registration._id } });
+        if (dup) {
+          return res.status(409).json({ message: 'This cash deposit receipt number is already used' });
+        }
+      }
+      registration.receiptNumber = receipt;
+    }
+
+    await registration.save();
+
+    res.json({ message: 'Registration updated successfully', registration });
+  } catch (err) {
+    console.error('Update registration error:', err);
+    res.status(500).json({ message: 'Error updating registration' });
   }
 }
 

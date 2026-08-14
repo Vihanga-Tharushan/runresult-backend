@@ -3,11 +3,13 @@ import {
   registerAthlete,
   getRegistrationsByChampionship,
   getMyRegistrations,
+  updateRegistration,
 } from "../controllers/registrationController.js";
 
 const registrationRouters = express.Router();
 
 registrationRouters.post("/", registerAthlete);
+registrationRouters.put("/:id", updateRegistration);
 registrationRouters.get("/my", getMyRegistrations);
 registrationRouters.get("/championship/:championshipId", getRegistrationsByChampionship);
 

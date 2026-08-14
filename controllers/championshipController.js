@@ -32,6 +32,8 @@ export async function createChampionship(req, res) {
       heatResults: { url: '', connected: false },
       finalResults: { url: '', connected: false },
       certificate: { url: '', connected: false },
+      points: { url: '', connected: false },
+      medals: { url: '', connected: false },
     },
     createdBy: req.user?.email || '',
   });
