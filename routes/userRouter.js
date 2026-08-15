@@ -13,7 +13,8 @@ userRouters.get("/staff", getStaff);
 userRouters.post("/staff", createStaff);
 userRouters.put("/:id", updateStaff);
 userRouters.delete("/:id", deleteUser);
-userRouters.get("/send-otp/:email", sendOTP); // New route for sending OTP
-userRouters.post("/change-password", changePasswordViaOTP); // New route for changing password
+userRouters.get("/send-otp/:email", sendOTP); // Send OTP for password reset (legacy)
+userRouters.post("/send-otp", sendOTP); // Send OTP for password reset
+userRouters.post("/change-password", changePasswordViaOTP); // Reset password via OTP
 
 export default userRouters;

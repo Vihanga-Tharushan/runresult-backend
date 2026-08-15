@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import axios from "axios";
 import nodemailer from "nodemailer";
+import { randomInt } from "crypto";
 import OTP from "../models/otpModel.js";
 import dotenv from "dotenv";
 
@@ -300,39 +301,53 @@ export function deleteUser(req, res) {
         .catch(() => res.status(500).json({ message: "Error deleting user" }));
 }
 
+const OTP_EXPIRY_MS = 10 * 60 * 1000;
+const OTP_RATE_LIMIT_MS = 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export async function sendOTP(req, res) {
 
-    const email = req.params.email;
-    if(email == null){
-        res.status(400).json({
-            message: "Email not provided"
-        });
+    const email = String(req.body?.email || req.params?.email || '').trim().toLowerCase();
 
-        return;
+    if (!email) {
+        return res.status(400).json({ message: "Email not provided" });
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+        return res.status(400).json({ message: "Please enter a valid email address" });
     }
 
-    const user = await User.findOne({ email });
-    if (!user) {
-        return res.status(404).json({ message: "No account found with this email" });
-    }
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: "No account found with this email" });
+        }
 
-    // Generate a 6-digit OTP 100000 to 999999
-    const otp = Math.floor(100000 + Math.random() * 900000);
+        const recent = await OTP.findOne({ email }).sort({ createdAt: -1 });
+        if (recent?.createdAt) {
+            const elapsed = Date.now() - new Date(recent.createdAt).getTime();
+            if (elapsed < OTP_RATE_LIMIT_MS) {
+                const wait = Math.ceil((OTP_RATE_LIMIT_MS - elapsed) / 1000);
+                return res.status(429).json({ message: `Please wait ${wait}s before requesting a new code` });
+            }
+        }
 
-    try{
+        const otp = String(randomInt(100000, 1000000));
+        const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
 
-        await OTP.deleteMany({ email: email });
+        await OTP.deleteMany({ email });
 
-        const newOTP = new OTP({
-            email: email,
-            otp: otp
+        await OTP.create({
+            email,
+            otp,
+            attempts: 0,
+            expiresAt,
         });
-
-        await newOTP.save();
 
         await transporter.sendMail({
             from: `"RunResult" <${process.env.EMAIL_USER}>`,
-            to: email,
+            to: user.email,
             subject: "Your Verification Code - RunResult",
             text: `Your verification code is ${otp}. It is valid for 10 minutes.`,
             html: `
@@ -468,13 +483,13 @@ export async function sendOTP(req, res) {
 </html>`
         });
 
-
-        res.json({
+        return res.json({
             message: "OTP sent successfully"
         });
 
-    }catch(err){
-        res.status(500).json({
+    } catch (err) {
+        console.error("Error sending OTP:", err);
+        return res.status(500).json({
             message: "Error sending OTP"
         });
     }
@@ -483,31 +498,53 @@ export async function sendOTP(req, res) {
 
 export async function changePasswordViaOTP(req, res) {
 
-    const email = req.body.email;
-    const otp = req.body.otp;
-    const newPassword = req.body.newPassword;
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const otp = String(req.body?.otp || '').trim();
+    const newPassword = req.body?.newPassword;
 
-
-    const otpRecord = await OTP.findOne({ email: email, otp: otp });
-
-    if(otpRecord == null){
-        return res.status(400).json({
-            message: "Invalid OTP"
-        });
+    if (!email || !otp) {
+        return res.status(400).json({ message: "Email and OTP are required" });
     }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-        await OTP.deleteMany({ email });
-        return res.status(404).json({ message: "No account found with this email" });
+    if (!/^\d{6}$/.test(otp)) {
+        return res.status(400).json({ message: "OTP must be 6 digits" });
+    }
+    if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
     try {
+        const otpRecord = await OTP.findOne({ email, otp });
+
+        if (!otpRecord) {
+            const latest = await OTP.findOne({ email }).sort({ createdAt: -1 });
+            if (latest) {
+                latest.attempts = (latest.attempts || 0) + 1;
+                if (latest.attempts >= OTP_MAX_ATTEMPTS) {
+                    await OTP.deleteMany({ email });
+                    return res.status(429).json({ message: "Too many incorrect attempts. Please request a new code." });
+                }
+                await latest.save();
+            }
+            return res.status(400).json({ message: "Invalid OTP" });
+        }
+
+        if (otpRecord.expiresAt && otpRecord.expiresAt < new Date()) {
+            await OTP.deleteMany({ email });
+            return res.status(400).json({ message: "OTP has expired. Please request a new code." });
+        }
+
+        const user = await User.findOne({ email });
+        if (!user) {
+            await OTP.deleteMany({ email });
+            return res.status(404).json({ message: "No account found with this email" });
+        }
+
         user.password = bcrypt.hashSync(newPassword, 10);
         await user.save();
-        await OTP.deleteMany({ email: email });
-        res.json({ message: "Password changed successfully" });
+        await OTP.deleteMany({ email });
+        return res.json({ message: "Password changed successfully" });
     } catch (err) {
-        res.status(500).json({ message: "Error changing password" });
+        console.error("Error changing password:", err);
+        return res.status(500).json({ message: "Error changing password" });
     }
 }
