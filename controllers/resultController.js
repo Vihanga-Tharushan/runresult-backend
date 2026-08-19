@@ -110,6 +110,78 @@ function parseSheet(rows) {
   return events;
 }
 
+function parseArmySheet(rows) {
+  const events = {};
+  let currentEvent = null;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    const firstCell = (row[0] || '').trim();
+
+    if (firstCell === 'E: No:') {
+      const eventNo = (row[1] || '').trim();
+      const eventName = (row[2] || '').trim();
+      const category = (row[3] || '').trim();
+      currentEvent = {
+        id: eventNo,
+        name: eventName,
+        category,
+        date: '',
+        wind: '',
+        results: [],
+      };
+      events[eventNo] = currentEvent;
+      continue;
+    }
+
+    if (firstCell === 'Place' || firstCell === 'place') {
+      continue;
+    }
+
+    if (currentEvent && /^\d+$/.test(firstCell)) {
+      const rank = parseInt(firstCell, 10);
+      const bib = (row[1] || '').trim();
+      const serviceNumber = (row[2] || '').trim();
+      const rankTitle = (row[3] || '').trim();
+      const name = (row[4] || '').trim();
+      const regiment = (row[5] || '').trim();
+      const performance = (row[6] || '').trim();
+      const remarks = (row[7] || '').trim();
+
+      let medal = null;
+      if (rank === 1) medal = 'Gold';
+      else if (rank === 2) medal = 'Silver';
+      else if (rank === 3) medal = 'Bronze';
+
+      const records = [];
+      if (remarks) {
+        const cleanRemarks = remarks.replace(/[*]/g, '').trim();
+        if (cleanRemarks) records.push(cleanRemarks);
+      }
+
+      if (name) {
+        currentEvent.results.push({
+          rank,
+          bib,
+          athlete: name,
+          club: regiment,
+          country: '',
+          performance,
+          medal,
+          records,
+          members: [],
+          serviceNumber,
+          rankTitle,
+        });
+      }
+    }
+  }
+
+  return events;
+}
+
 export function parseHeatSheet(rows) {
   const events = {};
   let currentHeat = null;
@@ -347,16 +419,18 @@ export async function getFinalResults(req, res) {
 
     const championship = await Championship.findOne({ championship_id: championshipId });
     if (!championship) {
+      console.log('[FinalResults] Championship not found:', championshipId);
       return res.status(404).json({ message: 'Championship not found' });
     }
 
     const sheetUrl = championship.googleSheets?.finalResults?.url;
     if (!sheetUrl) {
-      return res.json({ events: {}, days: [] });
+      return res.json({ events: {}, days: [], format: 'normal' });
     }
 
     const serviceAccountB64 = process.env.GOOGLE_SERVICE_ACCOUNT_B64;
     if (!serviceAccountB64) {
+      console.log('[FinalResults] Google service account not configured');
       return res.status(500).json({ message: 'Google Sheets service account not configured' });
     }
 
@@ -378,6 +452,8 @@ export async function getFinalResults(req, res) {
       fields: 'sheets.properties',
     });
 
+    const format = req.query.format || championship.finalResultsFormat || 'normal';
+
     const allEvents = {};
     const days = [];
 
@@ -391,7 +467,14 @@ export async function getFinalResults(req, res) {
         range: `${sheetName}!A1:${lastCol}${rowCount}`,
       });
       const rows = res.data.values || [];
-      const parsed = parseSheet(rows);
+      let parsed = format === 'army' ? parseArmySheet(rows) : parseSheet(rows);
+
+      if (Object.keys(parsed).length === 0) {
+        const altParsed = format === 'army' ? parseSheet(rows) : parseArmySheet(rows);
+        if (Object.keys(altParsed).length > 0) {
+          parsed = altParsed;
+        }
+      }
 
       const dayEvents = [];
       for (const [id, event] of Object.entries(parsed)) {
@@ -403,9 +486,9 @@ export async function getFinalResults(req, res) {
       days.push({ name: sheetName, events: dayEvents });
     }
 
-    res.json({ events: allEvents, days });
+    res.json({ events: allEvents, days, format });
   } catch (err) {
-    console.error('Error fetching final results:', err.message);
+    console.error('[FinalResults] Error:', err.message, err.stack);
     res.status(500).json({ message: 'Error fetching final results' });
   }
 }

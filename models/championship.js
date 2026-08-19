@@ -43,6 +43,12 @@ const championshipSchema = new mongoose.Schema({
     fee: Number,
   }],
 
+  finalResultsFormat: {
+    type: String,
+    enum: ['normal', 'withoutZone', 'army'],
+    default: 'normal',
+  },
+
   googleSheets: {
     registration: { url: String, connected: { type: Boolean, default: false } },
     startList: { url: String, connected: { type: Boolean, default: false } },
