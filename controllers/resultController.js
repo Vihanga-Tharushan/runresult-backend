@@ -783,3 +783,45 @@ export async function getMedals(req, res) {
     res.status(500).json({ message: 'Error fetching medals' });
   }
 }
+
+export async function getRecords(req, res) {
+  try {
+    const { championshipId } = req.params;
+
+    const championship = await Championship.findOne({ championship_id: championshipId });
+    if (!championship) {
+      return res.status(404).json({ message: 'Championship not found' });
+    }
+
+    const recordsData = championship.googleSheets?.records || { url: '', connected: false, type: 'sheet' };
+    if (!recordsData.connected || !recordsData.url) {
+      return res.json({ type: recordsData.type || 'sheet', url: '', exists: false });
+    }
+
+    return res.json({ type: recordsData.type || 'sheet', url: recordsData.url, exists: true });
+  } catch (err) {
+    console.error('Error fetching records info:', err.message);
+    res.status(500).json({ message: 'Error fetching records' });
+  }
+}
+
+export async function getTrophies(req, res) {
+  try {
+    const { championshipId } = req.params;
+
+    const championship = await Championship.findOne({ championship_id: championshipId });
+    if (!championship) {
+      return res.status(404).json({ message: 'Championship not found' });
+    }
+
+    const trophiesData = championship.googleSheets?.trophies || { url: '', connected: false, type: 'sheet' };
+    if (!trophiesData.connected || !trophiesData.url) {
+      return res.json({ type: trophiesData.type || 'sheet', url: '', exists: false });
+    }
+
+    return res.json({ type: trophiesData.type || 'sheet', url: trophiesData.url, exists: true });
+  } catch (err) {
+    console.error('Error fetching trophies info:', err.message);
+    res.status(500).json({ message: 'Error fetching trophies' });
+  }
+}

@@ -57,6 +57,8 @@ const championshipSchema = new mongoose.Schema({
     certificate: { url: String, connected: { type: Boolean, default: false } },
     points: { url: String, connected: { type: Boolean, default: false } },
     medals: { url: String, connected: { type: Boolean, default: false } },
+    records: { url: String, connected: { type: Boolean, default: false }, type: { type: String, enum: ['pdf', 'spreadsheet', 'drive', 'sheet'], default: 'sheet' } },
+    trophies: { url: String, connected: { type: Boolean, default: false }, type: { type: String, enum: ['pdf', 'spreadsheet', 'drive', 'sheet'], default: 'sheet' } },
   },
   createdBy: { type: String, default: '' },
   

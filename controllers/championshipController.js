@@ -34,6 +34,8 @@ export async function createChampionship(req, res) {
       certificate: { url: '', connected: false },
       points: { url: '', connected: false },
       medals: { url: '', connected: false },
+      records: { url: '', connected: false, type: 'pdf' },
+      trophies: { url: '', connected: false, type: 'pdf' },
     },
     createdBy: req.user?.email || '',
   });
@@ -88,32 +90,67 @@ export function getChampionship(req, res) {
     });
 }
 
-export function updateChampionship(req, res) {
-  const data = req.body;
+const UPDATABLE_FIELDS = [
+  'name',
+  'description',
+  'organizer',
+  'venue',
+  'district',
+  'startDate',
+  'endDate',
+  'regOpenDate',
+  'regCloseDate',
+  'banner',
+  'logo',
+  'selectedEvents',
+  'registrationStatus',
+  'publishStatus',
+  'athleteCount',
+  'maxEventsPerAthlete',
+  'pricing',
+  'finalResultsFormat',
+  'googleSheets',
+  'createdBy',
+];
 
-  Championship.findByIdAndUpdate(
-    req.params.id,
-    {
-      ...data,
-      eventCount: data.selectedEvents?.length || 0,
-    },
-    { returnDocument: 'after' }
-  )
-    .then((championship) => {
-      if (!championship) {
-        return res.status(404).json({ message: "Championship not found" });
-      }
-      res.json({
-        message: "Championship updated successfully",
-        championship,
-      });
-    })
-    .catch((err) => {
-      res.status(500).json({
-        message: "Error updating championship",
-        error: err.message,
-      });
+export async function updateChampionship(req, res) {
+  const update = {};
+
+  for (const field of UPDATABLE_FIELDS) {
+    if (req.body[field] !== undefined) {
+      update[field] = req.body[field];
+    }
+  }
+
+  if (Object.keys(update).length === 0) {
+    return res.status(400).json({ message: "No valid fields to update" });
+  }
+
+  if (update.selectedEvents) {
+    update.eventCount = update.selectedEvents.length;
+  }
+
+  try {
+    const championship = await Championship.findByIdAndUpdate(
+      req.params.id,
+      update,
+      { returnDocument: 'after', runValidators: true }
+    );
+
+    if (!championship) {
+      return res.status(404).json({ message: "Championship not found" });
+    }
+
+    res.json({
+      message: "Championship updated successfully",
+      championship,
     });
+  } catch (err) {
+    res.status(500).json({
+      message: "Error updating championship",
+      error: err.message,
+    });
+  }
 }
 
 export function deleteChampionship(req, res) {
