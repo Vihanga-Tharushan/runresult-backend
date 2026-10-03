@@ -1,58 +1,83 @@
 import Championship from "../models/championship.js";
 
+const ID_ATTEMPTS = 5;
+
+function formatChampionshipId(num) {
+  return `CHMP-${String(num).padStart(4, '0')}`;
+}
+
+async function nextChampionshipIdNumber() {
+  const existing = await Championship.find({}, { championship_id: 1 }).lean();
+
+  return existing.reduce((highest, doc) => {
+    const match = String(doc.championship_id || '').match(/(\d+)\s*$/);
+    const num = match ? parseInt(match[1], 10) : 0;
+    return num > highest ? num : highest;
+  }, 0) + 1;
+}
+
 export async function createChampionship(req, res) {
   const data = req.body;
 
-  const count = await Championship.countDocuments();
-  const championship_id = `CHMP-${String(count + 1).padStart(4, '0')}`;
+  const nextIdNumber = await nextChampionshipIdNumber();
+  let lastError = null;
 
-  const championship = new Championship({
-    championship_id,
-    name: data.name,
-    description: data.description || '',
-    organizer: data.organizer,
-    venue: data.venue,
-    district: data.district || '',
-    startDate: data.startDate,
-    endDate: data.endDate,
-    regOpenDate: data.regOpenDate || '',
-    regCloseDate: data.regCloseDate || '',
-    banner: data.banner || '',
-    logo: data.logo || '',
-    selectedEvents: data.selectedEvents || [],
-    registrationStatus: data.registrationStatus || 'draft',
-    publishStatus: data.publishStatus || 'draft',
-    athleteCount: data.athleteCount || 0,
-    eventCount: data.selectedEvents?.length || 0,
-    maxEventsPerAthlete: data.maxEventsPerAthlete || 3,
-    pricing: data.pricing || [{ events: 1, fee: 0 }],
-    googleSheets: data.googleSheets || {
-      registration: { url: '', connected: false },
-      startList: { url: '', connected: false },
-      heatResults: { url: '', connected: false },
-      finalResults: { url: '', connected: false },
-      certificate: { url: '', connected: false },
-      points: { url: '', connected: false },
-      medals: { url: '', connected: false },
-      records: { url: '', connected: false, type: 'pdf' },
-      trophies: { url: '', connected: false, type: 'pdf' },
-    },
-    createdBy: req.user?.email || '',
-  });
+  for (let attempt = 0; attempt < ID_ATTEMPTS; attempt++) {
+    const championship = new Championship({
+      championship_id: formatChampionshipId(nextIdNumber + attempt),
+      name: data.name,
+      description: data.description || '',
+      organizer: data.organizer,
+      venue: data.venue,
+      district: data.district || '',
+      startDate: data.startDate,
+      endDate: data.endDate,
+      regOpenDate: data.regOpenDate || '',
+      regCloseDate: data.regCloseDate || '',
+      banner: data.banner || '',
+      logo: data.logo || '',
+      selectedEvents: data.selectedEvents || [],
+      registrationStatus: data.registrationStatus || 'draft',
+      publishStatus: data.publishStatus || 'draft',
+      athleteCount: data.athleteCount || 0,
+      eventCount: data.selectedEvents?.length || 0,
+      maxEventsPerAthlete: data.maxEventsPerAthlete || 3,
+      pricing: data.pricing || [{ events: 1, fee: 0 }],
+      googleSheets: data.googleSheets || {
+        registration: { url: '', connected: false },
+        startList: { url: '', connected: false },
+        heatResults: { url: '', connected: false },
+        finalResults: { url: '', connected: false },
+        certificate: { url: '', connected: false },
+        points: { url: '', connected: false },
+        medals: { url: '', connected: false },
+        records: { url: '', connected: false, type: 'pdf' },
+        trophies: { url: '', connected: false, type: 'pdf' },
+      },
+      createdBy: req.user?.email || '',
+    });
 
-  championship.save()
-    .then((saved) => {
-      res.json({
+    try {
+      const saved = await championship.save();
+      return res.json({
         message: "Championship created successfully",
         championship: saved,
       });
-    })
-    .catch((err) => {
-      res.status(500).json({
-        message: "Error creating championship",
-        error: err.message,
-      });
-    });
+    } catch (err) {
+      if (err.code !== 11000 || !err.keyPattern?.championship_id) {
+        return res.status(500).json({
+          message: "Error creating championship",
+          error: err.message,
+        });
+      }
+      lastError = err;
+    }
+  }
+
+  res.status(500).json({
+    message: "Error creating championship",
+    error: lastError?.message,
+  });
 }
 
 export function getChampionships(req, res) {
